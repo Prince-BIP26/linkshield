@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkShield — Fake Login Page Detector</title>
+  <meta name="description" content="Detect phishing and fake login pages before entering your credentials. LinkShield analyzes URLs for security threats." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --background: hsl(215, 28%, 10%);
+      --foreground: hsl(210, 20%, 96%);
+      --card: hsl(215, 25%, 15%);
+      --card-foreground: hsl(210, 20%, 96%);
+      --primary: hsl(0, 72%, 55%);
+      --primary-foreground: hsl(0, 0%, 100%);
+      --secondary: hsl(215, 16%, 55%);
+      --muted: hsl(215, 16%, 25%);
+      --muted-foreground: hsl(215, 16%, 70%);
+      --accent: hsl(24, 95%, 58%);
+      --destructive: hsl(0, 84%, 60%);
+      --success: hsl(155, 70%, 42%);
+      --warning: hsl(38, 95%, 52%);
+      --border: hsl(215, 16%, 25%);
+      --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
+      --font-display: 'Space Grotesk', sans-serif;
+      --radius: 0.75rem;
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-display);
+      overflow-x: hidden;
+    }
+
+    /* Dot grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: radial-gradient(circle at 1px 1px, hsl(0 72% 50%) 1px, transparent 0);
+      background-size: 32px 32px;
+      z-index: 0;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /* ─── Hero ─────────────────────────────────────────── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 4rem 0 2rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      animation: fadeDown 0.8s ease both;
+    }
+
+    .logo-icon {
+      position: relative;
+      display: flex;
+    }
+    .logo-icon svg {
+      width: 48px;
+      height: 48px;
+      color: var(--primary);
+    }
+    .logo-icon .blur-icon {
+      position: absolute;
+      inset: 0;
+      filter: blur(12px);
+      opacity: 0.5;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    h1 .brand-red { color: var(--primary); }
+    h1 .brand-white { color: var(--foreground); }
+
+    .tagline {
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      color: var(--muted-foreground);
+      margin-bottom: 2.5rem;
+      text-align: center;
+      max-width: 480px;
+      animation: fadeIn 0.6s 0.3s ease both;
+    }
+
+    /* ─── URL Form ─────────────────────────────────────── */
+    .url-form {
+      width: 100%;
+      max-width: 700px;
+      animation: scaleIn 0.5s 0.5s ease both;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+    .input-glow {
+      position: absolute;
+      inset: -2px;
+      border-radius: calc(var(--radius) + 2px);
+      background: linear-gradient(90deg, hsl(0 72% 55% / 0.5), hsl(24 95% 58% / 0.5), hsl(0 72% 55% / 0.5));
+      filter: blur(6px);
+      opacity: 0.3;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .input-wrapper:hover .input-glow,
+    .input-wrapper:focus-within .input-glow {
+      opacity: 0.65;
+    }
+
+    .input-row {
+      position: relative;
+      display: flex;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .input-icon {
+      display: flex;
+      align-items: center;
+      padding-left: 1rem;
+      color: var(--muted-foreground);
+    }
+
+    #urlInput {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 1rem;
+      color: var(--foreground);
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+    }
+    #urlInput::placeholder { color: var(--muted-foreground); }
+    #urlInput:disabled { opacity: 0.5; }
+
+    .analyze-btn {
+      padding: 0 1.5rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.875rem;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: background 0.2s, opacity 0.2s;
+      white-space: nowrap;
+    }
+    .analyze-btn:hover:not(:disabled) { background: hsl(0, 72%, 48%); }
+    .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .error-msg {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--destructive);
+      text-align: center;
+      margin-top: 0.75rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* ─── Scan Animation ──────────────────────────────── */
+    #scanBlock {
+      display: none;
+      max-width: 700px;
+      margin: 2rem auto;
+      animation: fadeIn 0.4s ease;
+    }
+    #scanBlock.visible { display: block; }
+
+    .scan-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .scan-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--primary);
+      margin-bottom: 1rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--primary);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .scan-line {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0;
+      opacity: 0;
+      transform: translateX(-8px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .scan-line.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .scan-line .arrow { color: var(--primary); }
+    .scan-line .text { color: var(--muted-foreground); }
+    .scan-line .check { color: var(--success); margin-left: auto; }
+
+    /* ─── Results ─────────────────────────────────────── */
+    #resultsBlock {
+      display: none;
+      animation: fadeUp 0.6s ease;
+    }
+    #resultsBlock.visible { display: block; }
+
+    .verdict-card {
+      border-radius: var(--radius);
+      border-width: 1px;
+      border-style: solid;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .verdict-card.legitimate {
+      border-color: hsl(155 70% 42% / 0.3);
+      background: hsl(155 70% 42% / 0.05);
+      box-shadow: 0 4px 20px hsl(155 70% 42% / 0.1);
+    }
+    .verdict-card.suspicious {
+      border-color: hsl(38 95% 52% / 0.3);
+      background: hsl(38 95% 52% / 0.05);
+    }
+    .verdict-card.phishing {
+      border-color: hsl(0 84% 60% / 0.3);
+      background: hsl(0 84% 60% / 0.05);
+      box-shadow: 0 4px 20px hsl(0 84% 60% / 0.12);
+    }
+
+    .verdict-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    @media (min-width: 640px) {
+      .verdict-inner { flex-direction: row; }
+    }
+
+    /* Gauge */
+    .gauge-wrap {
+      flex-shrink: 0;
+      width: 112px;
+      height: 112px;
+      position: relative;
+    }
+    .gauge-wrap svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+    .gauge-track { fill: none; stroke: hsl(215 16% 25%); stroke-width: 6; }
+    .gauge-fill {
+      fill: none;
+      stroke-width: 6;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .gauge-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .gauge-score {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+    .gauge-text {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      color: var(--muted-foreground);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .verdict-info { flex: 1; text-align: center; }
+    @media (min-width: 640px) { .verdict-info { text-align: left; } }
+
+    .verdict-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+    }
+    @media (min-width: 640px) { .verdict-status { justify-content: flex-start; } }
+
+    .verdict-label {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: 0.05em;
+    }
+    .verdict-url {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--muted-foreground);
+      word-break: break-all;
+      margin-bottom: 0.5rem;
+    }
+    .verdict-desc { font-size: 0.9rem; }
+
+    .color-success { color: var(--success); }
+    .color-warning { color: var(--warning); }
+    .color-danger  { color: var(--destructive); }
+
+    /* Checks Grid */
+    .section-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .checks-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    @media (min-width: 640px) {
+      .checks-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 900px) {
+      .checks-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .check-card {
+      border-radius: var(--radius);
+      border-width: 1px;
+      border-style: solid;
+      padding: 1rem;
+      animation: fadeUp 0.4s ease both;
+    }
+    .check-card.safe    { border-color: hsl(155 70% 42% / 0.2); background: hsl(155 70% 42% / 0.05); }
+    .check-card.warning { border-color: hsl(38 95% 52% / 0.2);  background: hsl(38 95% 52% / 0.05); }
+    .check-card.danger  { border-color: hsl(0 84% 60% / 0.2);   background: hsl(0 84% 60% / 0.05); }
+
+    .check-card-inner { display: flex; gap: 0.75rem; align-items: flex-start; }
+    .check-card-icon { flex-shrink: 0; margin-top: 2px; }
+    .check-card-name {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+    }
+    .check-card-details {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      line-height: 1.5;
+    }
+
+    /* Report */
+    .report-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 3rem;
+    }
+
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .report-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    .download-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: hsl(0 72% 55% / 0.1);
+      border: 1px solid hsl(0 72% 55% / 0.3);
+      color: var(--primary);
+      border-radius: calc(var(--radius) - 2px);
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 0.875rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .download-btn:hover { background: hsl(0 72% 55% / 0.2); }
+
+    .status-banner {
+      border-radius: calc(var(--radius) - 2px);
+      border-width: 1px;
+      border-style: solid;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .status-banner.legitimate { border-color: hsl(155 70% 42% / 0.3); background: hsl(155 70% 42% / 0.1); }
+    .status-banner.suspicious { border-color: hsl(38 95% 52% / 0.3);  background: hsl(38 95% 52% / 0.1); }
+    .status-banner.phishing   { border-color: hsl(0 84% 60% / 0.3);   background: hsl(0 84% 60% / 0.1); }
+
+    .status-banner-inner { display: flex; gap: 0.75rem; align-items: flex-start; }
+    .status-banner-heading {
+      font-family: var(--font-display);
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .status-banner-text { font-size: 0.875rem; line-height: 1.6; }
+
+    .findings-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .findings-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; }
+
+    .finding-item {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+      font-size: 0.875rem;
+    }
+    .finding-item strong { color: var(--foreground); }
+    .finding-item .finding-text { color: var(--muted-foreground); }
+
+    .advice-box {
+      background: hsl(215 16% 25% / 0.5);
+      border-radius: calc(var(--radius) - 2px);
+      padding: 1rem;
+    }
+    .advice-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+    .advice-lines { display: flex; flex-direction: column; gap: 0.4rem; }
+    .advice-line { font-size: 0.875rem; line-height: 1.5; }
+
+    /* ─── Feature Hints ──────────────────────────────── */
+    #hintsBlock {
+      display: block;
+    }
+    #hintsBlock.hidden { display: none; }
+
+    .hints-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      margin-top: 3rem;
+      margin-bottom: 3rem;
+      animation: fadeIn 1s 1s ease both;
+    }
+    @media (min-width: 640px) {
+      .hints-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .hint-card {
+      background: hsl(215 25% 15% / 0.5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      text-align: center;
+    }
+    .hint-icon { color: var(--primary); opacity: 0.6; margin: 0 auto 0.75rem; display: block; }
+    .hint-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+    }
+    .hint-desc {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+    }
+
+    /* ─── Animations ─────────────────────────────────── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Icon helper */
+    .icon { display: inline-block; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Hero -->
+    <div class="hero">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <div class="blur-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary);width:48px;height:48px;">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+        </div>
+        <h1><span class="brand-red">Link</span><span class="brand-white">Shield</span></h1>
+      </div>
+      <p class="tagline">&gt; Detect fake login pages &amp; phishing websites before entering credentials</p>
+
+      <!-- URL Form -->
+      <form class="url-form" id="analyzeForm" onsubmit="handleAnalyze(event)">
+        <div class="input-wrapper">
+          <div class="input-glow"></div>
+          <div class="input-row">
+            <div class="input-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+            </div>
+            <input type="text" id="urlInput" placeholder="Enter URL to analyze (e.g., example.com/login)" autocomplete="off" />
+            <button type="submit" class="analyze-btn" id="analyzeBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              <span id="btnText">ANALYZE</span>
+            </button>
+          </div>
+        </div>
+        <div class="error-msg" id="errorMsg" style="display:none;"></div>
+      </form>
+    </div>
+
+    <!-- Scan Animation -->
+    <div id="scanBlock">
+      <div class="scan-card">
+        <div class="scan-header">
+          <div class="spinner"></div>
+          <span>Scanning in progress</span>
+        </div>
+        <div id="scanLines"></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="resultsBlock">
+      <!-- Verdict Card -->
+      <div class="verdict-card" id="verdictCard">
+        <div class="verdict-inner">
+          <div class="gauge-wrap">
+            <svg viewBox="0 0 100 100">
+              <circle class="gauge-track" cx="50" cy="50" r="45"/>
+              <circle class="gauge-fill" id="gaugeFill" cx="50" cy="50" r="45"/>
+            </svg>
+            <div class="gauge-label">
+              <span class="gauge-score" id="gaugeScore">0</span>
+              <span class="gauge-text">risk</span>
+            </div>
+          </div>
+          <div class="verdict-info">
+            <div class="verdict-status">
+              <span id="verdictIcon"></span>
+              <span class="verdict-label" id="verdictLabel"></span>
+            </div>
+            <div class="verdict-url" id="verdictUrl"></div>
+            <div class="verdict-desc" id="verdictDesc"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Checks -->
+      <div class="section-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Security Analysis Breakdown
+      </div>
+      <div class="checks-grid" id="checksGrid"></div>
+
+      <!-- Report -->
+      <div class="report-card" id="reportCard">
+        <div class="report-header">
+          <div class="report-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            Summary &amp; Recommendations
+          </div>
+          <a href="#" class="download-btn" id="downloadBtn" onclick="downloadReport(event)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download Report
+          </a>
+        </div>
+
+        <div class="status-banner" id="statusBanner">
+          <div class="status-banner-inner">
+            <span id="bannerIcon"></span>
+            <div>
+              <div class="status-banner-heading" id="bannerHeading"></div>
+              <div class="status-banner-text" id="bannerText"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="findings-title">Key Findings:</div>
+        <div class="findings-list" id="findingsList"></div>
+
+        <div class="advice-box">
+          <div class="advice-title">💡 What should you do?</div>
+          <div class="advice-lines" id="adviceLines"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature Hints -->
+    <div id="hintsBlock">
+      <div class="hints-grid">
+        <div class="hint-card">
+          <svg class="hint-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <div class="hint-label">URL Structure</div>
+          <div class="hint-desc">Analyzes domain patterns</div>
+        </div>
+        <div class="hint-card">
+          <svg class="hint-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div class="hint-label">Threat Detection</div>
+          <div class="hint-desc">Identifies phishing signals</div>
+        </div>
+        <div class="hint-card">
+          <svg class="hint-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          <div class="hint-label">Safety Rating</div>
+          <div class="hint-desc">Provides risk assessment</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SCAN_LINES = [
+      'Initializing URL parser...',
+      'Checking HTTPS certificate...',
+      'Analyzing domain structure...',
+      'Scanning for brand impersonation...',
+      'Detecting suspicious patterns...',
+      'Running phishing heuristics...',
+      'Compiling threat assessment...',
+    ];
+
+    let currentResult = null;
+
+    function svgIcon(path, size=20, color='currentColor') {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+    }
+
+    const ICONS = {
+      check: '<polyline points="20 6 9 17 4 12"/>',
+      alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+      x: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+      shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+      shieldCheck: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',
+      shieldAlert: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    };
+
+    function runScanAnimation() {
+      const container = document.getElementById('scanLines');
+      container.innerHTML = '';
+      SCAN_LINES.forEach((line, i) => {
+        const div = document.createElement('div');
+        div.className = 'scan-line';
+        div.innerHTML = `<span class="arrow">&gt;</span><span class="text">${line}</span><span class="check">✓</span>`;
+        container.appendChild(div);
+        setTimeout(() => div.classList.add('show'), i * 280);
+      });
+    }
+
+    async function handleAnalyze(e) {
+      e.preventDefault();
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+
+      // Reset UI
+      document.getElementById('errorMsg').style.display = 'none';
+      document.getElementById('resultsBlock').classList.remove('visible');
+      document.getElementById('hintsBlock').classList.remove('hidden');
+      document.getElementById('analyzeBtn').disabled = true;
+      document.getElementById('urlInput').disabled = true;
+      document.getElementById('btnText').textContent = 'SCANNING...';
+
+      // Show scan
+      document.getElementById('scanBlock').classList.add('visible');
+      runScanAnimation();
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        await new Promise(r => setTimeout(r, 2200));
+
+        if (data.error) {
+          showError(data.error);
+        } else {
+          currentResult = data;
+          renderResults(data);
+        }
+      } catch {
+        showError('Network error. Please try again.');
+      } finally {
+        document.getElementById('scanBlock').classList.remove('visible');
+        document.getElementById('analyzeBtn').disabled = false;
+        document.getElementById('urlInput').disabled = false;
+        document.getElementById('btnText').textContent = 'ANALYZE';
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function getStatusColor(status) {
+      return status === 'legitimate' ? 'var(--success)' : status === 'suspicious' ? 'var(--warning)' : 'var(--destructive)';
+    }
+    function getStatusClass(status) {
+      return status === 'legitimate' ? 'color-success' : status === 'suspicious' ? 'color-warning' : 'color-danger';
+    }
+
+    function renderResults(data) {
+      // Verdict card
+      const vc = document.getElementById('verdictCard');
+      vc.className = 'verdict-card ' + data.overall_status;
+
+      // Gauge
+      const circumference = 2 * Math.PI * 45;
+      const gaugeFill = document.getElementById('gaugeFill');
+      const color = getStatusColor(data.overall_status);
+      gaugeFill.style.stroke = color;
+      gaugeFill.style.filter = `drop-shadow(0 0 6px ${color})`;
+      gaugeFill.style.strokeDasharray = circumference;
+      gaugeFill.style.strokeDashoffset = circumference; // start at 0
+      document.getElementById('gaugeScore').style.color = color;
+      document.getElementById('gaugeScore').textContent = '0';
+
+      // Animate gauge
+      setTimeout(() => {
+        const target = circumference - (data.risk_score / 100) * circumference;
+        gaugeFill.style.strokeDashoffset = target;
+        // Animate score number
+        let start = 0;
+        const end = data.risk_score;
+        const duration = 1200;
+        const step = (end / duration) * 16;
+        const timer = setInterval(() => {
+          start = Math.min(start + step, end);
+          document.getElementById('gaugeScore').textContent = Math.round(start);
+          if (start >= end) clearInterval(timer);
+        }, 16);
+      }, 100);
+
+      // Verdict info
+      const icons = {
+        legitimate: svgIcon(ICONS.check, 24, 'var(--success)'),
+        suspicious: svgIcon(ICONS.alert, 24, 'var(--warning)'),
+        phishing: svgIcon(ICONS.x, 24, 'var(--destructive)'),
+      };
+      const labels = { legitimate: 'LEGITIMATE', suspicious: 'SUSPICIOUS', phishing: 'PHISHING DETECTED' };
+      const descs = {
+        legitimate: 'This URL appears to be safe. No significant phishing indicators detected.',
+        suspicious: 'This URL shows some suspicious characteristics. Proceed with caution.',
+        phishing: 'HIGH RISK: This URL exhibits multiple phishing indicators. Do NOT enter any credentials.',
+      };
+      document.getElementById('verdictIcon').innerHTML = icons[data.overall_status];
+      document.getElementById('verdictLabel').textContent = labels[data.overall_status];
+      document.getElementById('verdictLabel').className = 'verdict-label ' + getStatusClass(data.overall_status);
+      document.getElementById('verdictUrl').textContent = data.url;
+      document.getElementById('verdictDesc').textContent = descs[data.overall_status];
+
+      // Checks grid
+      const grid = document.getElementById('checksGrid');
+      grid.innerHTML = '';
+      const checkIcons = {
+        safe: svgIcon(ICONS.check, 20, 'var(--success)'),
+        warning: svgIcon(ICONS.alert, 20, 'var(--warning)'),
+        danger: svgIcon(ICONS.shield, 20, 'var(--destructive)'),
+      };
+      data.checks.forEach((check, i) => {
+        const card = document.createElement('div');
+        card.className = `check-card ${check.status}`;
+        card.style.animationDelay = `${i * 0.08}s`;
+        card.innerHTML = `
+          <div class="check-card-inner">
+            <div class="check-card-icon">${checkIcons[check.status]}</div>
+            <div>
+              <div class="check-card-name">${check.name}</div>
+              <div class="check-card-details">${check.details}</div>
+            </div>
+          </div>`;
+        grid.appendChild(card);
+      });
+
+      // Report
+      const bannerIcons = {
+        legitimate: svgIcon(ICONS.shieldCheck, 24, 'var(--success)'),
+        suspicious: svgIcon(ICONS.alert, 24, 'var(--warning)'),
+        phishing: svgIcon(ICONS.shieldAlert, 24, 'var(--destructive)'),
+      };
+      const sb = document.getElementById('statusBanner');
+      sb.className = 'status-banner ' + data.overall_status;
+      document.getElementById('bannerIcon').innerHTML = bannerIcons[data.overall_status];
+
+      const bannerHeadings = {
+        legitimate: 'This website looks safe',
+        suspicious: 'Be careful with this website',
+        phishing: 'This website is likely dangerous',
+      };
+      const headingClasses = {
+        legitimate: 'color-success', suspicious: 'color-warning', phishing: 'color-danger'
+      };
+      const bh = document.getElementById('bannerHeading');
+      bh.textContent = bannerHeadings[data.overall_status];
+      bh.className = 'status-banner-heading ' + headingClasses[data.overall_status];
+      document.getElementById('bannerText').textContent = getSummary(data);
+
+      // Findings
+      const findings = data.checks.filter(c => c.status !== 'safe');
+      const fl = document.getElementById('findingsList');
+      if (findings.length === 0) {
+        fl.innerHTML = '<p style="font-size:0.875rem;color:var(--success)">✅ All checks passed — no issues found.</p>';
+      } else {
+        fl.innerHTML = findings.map(c => `
+          <div class="finding-item">
+            <span>${c.status === 'danger' ? '❌' : '⚠️'}</span>
+            <span class="finding-text"><strong>${c.name}:</strong> ${c.details}</span>
+          </div>`).join('');
+      }
+
+      // Advice
+      const adviceLines = getAdvice(data).split('\n').filter(Boolean);
+      document.getElementById('adviceLines').innerHTML =
+        adviceLines.map(l => `<div class="advice-line">${l.trim()}</div>`).join('');
+
+      // Show / hide
+      document.getElementById('hintsBlock').classList.add('hidden');
+      document.getElementById('resultsBlock').classList.add('visible');
+    }
+
+    function getSummary(data) {
+      if (data.overall_status === 'legitimate')
+        return `We checked the website "${data.url}" and it looks safe to use. The website address follows normal patterns, uses secure encryption, and doesn't show signs of being a fake page trying to steal your information.`;
+      if (data.overall_status === 'suspicious')
+        return `We checked the website "${data.url}" and found some things that don't look quite right. While it might be a real website, there are a few warning signs that suggest you should be careful.`;
+      return `WARNING: The website "${data.url}" shows strong signs of being a FAKE page designed to steal your personal information. DO NOT enter any personal information on this page.`;
+    }
+
+    function getAdvice(data) {
+      if (data.overall_status === 'legitimate')
+        return `• This site appears safe, but always verify you're on the correct website\n• Look for the padlock icon in your browser's address bar\n• Never share your password with anyone, even if a website asks\n• Keep your browser and antivirus software up to date`;
+      if (data.overall_status === 'suspicious')
+        return `• Do NOT enter passwords or personal info until you verify this is the real site\n• Double-check the website address — phishing sites often change one letter\n• Try visiting the website by typing the address yourself instead of clicking links\n• If you received this link in an email or message, it might be a scam\n• When in doubt, contact the company directly through their official website`;
+      return `• DO NOT enter any passwords, usernames, or personal information\n• Close this website immediately\n• If you already entered information, change your passwords right away\n• Report this website to your email provider or IT department\n• Enable two-factor authentication (2FA) on your important accounts\n• Run an antivirus scan on your device`;
+    }
+
+    function downloadReport(e) {
+      e.preventDefault();
+      if (!currentResult) return;
+      const r = currentResult;
+      const statusLabel = r.overall_status === 'legitimate' ? 'SAFE' : r.overall_status === 'suspicious' ? 'SUSPICIOUS' : 'PHISHING DETECTED';
+      const lines = [
+        'LINKSHIELD — SECURITY REPORT',
+        '='.repeat(50),
+        `Date: ${r.timestamp}`,
+        `URL: ${r.url}`,
+        `Verdict: ${statusLabel}`,
+        `Risk Score: ${r.risk_score}/100`,
+        '',
+        'SUMMARY',
+        '-'.repeat(40),
+        getSummary(r),
+        '',
+        'DETAILED FINDINGS',
+        '-'.repeat(40),
+        ...r.checks.map((c, i) => {
+          const icon = c.status === 'safe' ? '[PASS]' : c.status === 'warning' ? '[WARN]' : '[FAIL]';
+          return `${i+1}. ${icon} ${c.name}\n   ${c.details}`;
+        }),
+        '',
+        'RECOMMENDED ACTIONS',
+        '-'.repeat(40),
+        getAdvice(r),
+        '',
+        'Generated by LinkShield — Stay safe online!',
+      ];
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `linkshield-report-${Date.now()}.txt`;
+      a.click();
+    }
+  </script>
+</body>
+</html>
